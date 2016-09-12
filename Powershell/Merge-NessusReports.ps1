@@ -1,4 +1,23 @@
+<#
+
+.SYNOPSIS
+This powershell script merges Nessus scans.
+
+.DESCRIPTION
+This powershell script downloads all Nessus scans in the folder specified, merge the downloaded scans and uploads a consolidated report to the root of the Nessus host.
+
+.EXAMPLE
+./Merge-NessusReport.ps1 -server 192.168.1.1 -folder Test
+
+.NOTES
+The server argument defaults to 127.0.0.1 and is optional.
+
+.LINK
+https://github.com/dtctd/Scripts/blob/master/Powershell/Merge-NessusReports.ps1
+
+#>
 #Requires -Version 3.0
+
 param (
     [string]$Server = "127.0.0.1",
     [Parameter(Mandatory=$true)][string]$Folder
