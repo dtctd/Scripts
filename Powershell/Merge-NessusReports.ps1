@@ -1,4 +1,23 @@
+<#
+
+.SYNOPSIS
+This powershell script merges Nessus scans.
+
+.DESCRIPTION
+This powershell script downloads all Nessus scans in the folder specified, merge the downloaded scans and uploads a consolidated report to the root of the Nessus host.
+
+.EXAMPLE
+./Merge-NessusReport.ps1 -server 192.168.1.1 -folder Test
+
+.NOTES
+The server argument defaults to 127.0.0.1 and is optional.
+
+.LINK
+https://github.com/dtctd/Scripts/blob/master/Powershell/Merge-NessusReports.ps1
+
+#>
 #Requires -Version 3.0
+
 param (
     [string]$Server = "127.0.0.1",
     [Parameter(Mandatory=$true)][string]$Folder
@@ -41,15 +60,15 @@ Function Export-Reports() {
 
     $scans = Get-NessusScan -SessionId $session.SessionId -FolderId $folder[0].FolderId | Where-Object {$_.Status -eq "completed" }
 
-    $scans  | ForEach-Object{
-        $scan = $_
+    $scans  | ForEach-Object{ 
+        $scan = $_ 
         $name = $scan.Name -replace "[\\\/]", "_"
         Write-host($(Get-Date -Format HH:mm) + " - Exporting $name")
-        $histories = Show-NessusScanHistory -SessionId $session.SessionId -ScanId $scan.ScanId | Where-Object {$_.Status -eq "completed"}
+        $histories = Show-NessusScanHistory -SessionId $session.SessionId -ScanId $scan.ScanId | Where-Object {$_.Status -eq "completed"} 
         if ($histories) {
-            $hist = $histories[0]
+            $hist = $histories[0] 
             Export-NessusScan -SessionId $session.SessionId -ScanId $scan.ScanId  -Format "nessus" -OutFile "$TargetDir\$name.nessus" -HistoryID $hist.HistoryId
-        }
+        }            
     }
     Write-host($(Get-Date -Format HH:mm) + " - Exports finished.") -ForegroundColor Green
 }
@@ -64,28 +83,28 @@ Function Merge-Reports() {
     $MainPath = $Reports[0].FullName
     [xml]$MainReport = Get-Content -Path $MainPath -Raw
 
-    foreach ($Report in $Reports) {
+    foreach ($Report in $Reports) {      
         $Reportpath = $Report.FullName
         if ( $Reportpath -ne $MainPath) {
-             Write-host($(Get-Date -Format HH:mm) + " - Merging ($Report.Name)")
+             Write-host($(Get-Date -Format HH:mm) + " - Merging " + ($Report.Name))
             [xml]$ReportToAdd = Get-Content -Path $Reportpath -Raw
             $ReportHostsToAdd = $ReportToAdd.NessusClientData_v2.Report.SelectNodes("ReportHost")
             foreach($ReportHost in $ReportHostsToAdd) {
                 $Node = $MainReport.ImportNode($ReportHost, $true)
                 $MainReport.NessusClientData_v2.Report.AppendChild($Node) > $null
             }
-            Remove-Item $Reportpath -Force
+            Remove-Item $Reportpath -Force       
         }
     }
     $MainReport.Save("$TargetDir\consolidated.nessus")
-    Remove-Item $MainPath -Force
+    Remove-Item $MainPath -Force 
     Write-host($(Get-Date -Format HH:mm) + " - Merging finished") -ForegroundColor Green
 }
 
 Function Import-Report {
     Import-Module -Name Posh-Nessus
     Write-host($(Get-Date -Format HH:mm) + " - Starting import.")
-    $session = New-NessusSession -ComputerName $Target -Credentials $Cred
+    $session = New-NessusSession -ComputerName $Server -Credentials $Cred
     $FileName = '<Report name="Consolidated ' + (get-date -format dd/MM/yyyy) + '"'
     (Get-Content -path "$TargetDir\consolidated.nessus" -ReadCount 0) -replace '<Report name=".*?"',$FileName | Set-Content $TargetDir\consolidated.nessus
     Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\consolidated.nessus" > $null
