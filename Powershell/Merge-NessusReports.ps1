@@ -118,7 +118,7 @@ Function Merge-Reports() {
         Debug "$SkipLines lines skipped for $_.name length of file is $EndLine"
         
         StreamEdit $_.FullName $SkipLines $RemoveLines
-        Move-Item $_.FullName $TargetDir\Processed
+        Move-Item $_.FullName $TargetDir\Processed -Force
     }
 }
 
