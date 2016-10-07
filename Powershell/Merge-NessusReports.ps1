@@ -75,39 +75,135 @@ Function Export-Reports() {
 
 Function Merge-Reports() {
     Write-host($(Get-Date -Format HH:mm) + " - Starting merge, please be patient it takes a while...")
-    if(Test-Path -Path "$TargetDir\consolidated.nessus") {
-        Write-host($(Get-Date -Format HH:mm) + " - Removing old merge file...") -ForegroundColor Yellow
-        Remove-Item -Path "$TargetDir\consolidated.nessus" -Force
+    if((Test-Path -Path "$TargetDir\output\") -eq $True) {
+        Debug "Output folder allready exists"
     }
-    $Reports = Get-ChildItem $TargetDir -force| Where-Object {$_.Extension -eq ".nessus"} | select Name, FullName
-    $MainPath = $Reports[0].FullName
-    [xml]$MainReport = Get-Content -Path $MainPath -Raw
+    else {
+        New-Item -ItemType Directory -Force -Path $TargetDir\Output\| out-null
+    }
+    if((Test-Path -Path "$TargetDir\Processed\") -eq $True ) {
+        Debug "Processed folder allready exists"
+    }
+    else {
+        New-Item -ItemType Directory -Force -Path $TargetDir\Processed\| out-null
+    }
+    
+    
+    if((Test-Path -Path "$TargetDir\Output\consolidated.nessus") -eq $True) {
+        Write-host($(Get-Date -Format HH:mm) + " - Removing old merge file...") -ForegroundColor Yellow
+        Remove-Item -Path "$TargetDir\Output\consolidated.nessus" -Force
+    }
 
-    foreach ($Report in $Reports) {      
-        $Reportpath = $Report.FullName
-        if ( $Reportpath -ne $MainPath) {
-             Write-host($(Get-Date -Format HH:mm) + " - Merging " + ($Report.Name))
-            [xml]$ReportToAdd = Get-Content -Path $Reportpath -Raw
-            $ReportHostsToAdd = $ReportToAdd.NessusClientData_v2.Report.SelectNodes("ReportHost")
-            foreach($ReportHost in $ReportHostsToAdd) {
-                $Node = $MainReport.ImportNode($ReportHost, $true)
-                $MainReport.NessusClientData_v2.Report.AppendChild($Node) > $null
-            }
-            Remove-Item $Reportpath -Force       
+    $First = Get-ChildItem $TargetDir -Filter *.nessus | Select -First 1
+    $Last = Get-ChildItem $TargetDir -Filter *.nessus | Select -Last 1
+    Debug "Firstfile is $First and the last file is $last"
+    
+    
+    Get-ChildItem $TargetDir -Filter *.nessus | %{
+
+        If($_.Name -ne $First.Name){
+            $SkipLines = (Select-String -Path $_.FullName -SimpleMatch "<Report name=" | select -expand LineNumber)
+        }
+        else {
+            $SkipLines = 0
+        }
+        
+        If($_.Name -ne $Last.Name){
+        $RemoveLines = 2
+        }
+        else {
+        $RemoveLines = 0
+        }
+
+        Debug "$SkipLines lines skipped for $_.name length of file is $EndLine"
+        
+        StreamEdit $_.FullName $SkipLines $RemoveLines
+        Move-Item $_.FullName $TargetDir\Processed
+    }
+}
+
+function CountLines($InputFile){
+    $count = 0
+    $reader = New-Object System.IO.StreamReader ($InputFile)
+    while ($reader.ReadLine() -ne $null){$count++}
+    $reader.Close()
+    return [int]$count
+}
+
+function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
+    $TotalLines = CountLines($InputFile)
+   
+    $LinesToProcessCount = ($TotalLines - $RemoveLines)
+    Debug "The total is $TotalLines and the lines to process is $LinesToProcessCount for $InputFile"
+    $Curcount = 0
+    $ins = New-Object System.IO.StreamReader ($InputFile)
+    $outs = New-Object System.IO.StreamWriter -ArgumentList ([IO.File]::Open(($TargetDir + "\Output\consolidated.nessus"),"Append")) 
+    try {
+        # skip the first N lines
+        for( $s = 1; $s -le $SkipLines; $s++ ) {
+            $ins.ReadLine() > $null
+            
+        }
+        $Curcount = $Curcount + $SkipLines
+        while( $Curcount -ne $LinesToProcessCount -and $Curcount -lt $TotalLines) {
+            #Debug "current: $curcount, to process: $LinesToProcessCount"
+            $outs.WriteLine( $ins.ReadLine() )
+            $Curcount++
+        }
+        Debug "Written $Curcount lines."
+    }
+    
+    finally {
+        Debug "Finished with $InputFile"
+        $outs.Close()
+        $ins.Close()
+    }
+}
+
+function Rename-Report($ReportName) {
+    $InputFile = "$TargetDir\Output\consolidated.nessus"
+    $stringToReplace = '\<Report name=\".*\"\sxmlns\:cm=\"http\:\/\/www\.nessus\.org\/cm\">'
+    $replaceWith = '<Report name="' + $ReportName + ' ' + (get-date -format dd/MM/yyyy) +'" xmlns:cm="http://www.nessus.org/cm">'
+    
+    try {
+    $reader = [System.IO.StreamReader] $InputFile
+    $data = $reader.ReadToEnd()
+    $reader.close()
+    }
+    
+    finally {
+        if ($reader -ne $null) {
+            $reader.dispose()
         }
     }
-    $MainReport.Save("$TargetDir\consolidated.nessus")
-    Remove-Item $MainPath -Force 
-    Write-host($(Get-Date -Format HH:mm) + " - Merging finished") -ForegroundColor Green
+
+    $data = $data -replace $stringToReplace, $replaceWith
+
+    try {
+        $writer = [System.IO.StreamWriter] $InputFile
+        $writer.write($data)
+        $writer.close()
+    }
+
+    finally {
+        if ($writer -ne $null) {
+            $writer.dispose()
+        }
+    }
+}
+
+function Debug($DebugMessage){
+    if ($debug -eq 1) {
+        write-host $DebugMessage
+    }
+        
 }
 
 Function Import-Report {
     Import-Module -Name Posh-Nessus
     Write-host($(Get-Date -Format HH:mm) + " - Starting import.")
     $session = New-NessusSession -ComputerName $Server -Credentials $Cred
-    $FileName = '<Report name="Consolidated ' + (get-date -format dd/MM/yyyy) + '"'
-    (Get-Content -path "$TargetDir\consolidated.nessus" -ReadCount 0) -replace '<Report name=".*?"',$FileName | Set-Content $TargetDir\consolidated.nessus
-    Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\consolidated.nessus" > $null
+    Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\Output\consolidated.nessus" #> $null
     Write-host($(Get-Date -Format HH:mm) + " - Import finished.") -ForegroundColor Green
 }
 
@@ -129,9 +225,11 @@ Function Main() {
     }
 
     $Cred = Get-Credential
+    $ReportName = "Consolidated $Folder"
     Export-Reports
     Merge-Reports
-    Import-Report
+    Rename-Report $ReportName
+    #Import-Report
     Write-host($(Get-Date -Format HH:mm) + " - Main finished") -ForegroundColor Green
 }
 
