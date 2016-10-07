@@ -229,7 +229,7 @@ Function Main() {
     Export-Reports
     Merge-Reports
     Rename-Report $ReportName
-    #Import-Report
+    Import-Report
     Write-host($(Get-Date -Format HH:mm) + " - Main finished") -ForegroundColor Green
 }
 
