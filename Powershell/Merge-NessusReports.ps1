@@ -94,6 +94,8 @@ Function Merge-Reports() {
         Remove-Item -Path "$TargetDir\Output\consolidated.nessus" -Force
     }
 
+    $outs = New-Object System.IO.StreamWriter -ArgumentList ([IO.File]::Open(($TargetDir + "\Output\consolidated.nessus"),"Append")) 
+
     $First = Get-ChildItem $TargetDir -Filter *.nessus | Select -First 1
     $Last = Get-ChildItem $TargetDir -Filter *.nessus | Select -Last 1
     Debug "Firstfile is $First and the last file is $last"
@@ -102,14 +104,14 @@ Function Merge-Reports() {
     Get-ChildItem $TargetDir -Filter *.nessus | %{
 
         If($_.Name -ne $First.Name){
-            $SkipLines = (Select-String -Path $_.FullName -SimpleMatch "<Report name=" | select -expand LineNumber)
+            $SkipLines = (Select-String -Path $_.FullName -SimpleMatch "<Report name=" | select -expand LineNumber) + 1
         }
         else {
             $SkipLines = 0
         }
         
         If($_.Name -ne $Last.Name){
-        $RemoveLines = 2
+        $RemoveLines = 4
         }
         else {
         $RemoveLines = 0
@@ -118,8 +120,9 @@ Function Merge-Reports() {
         Debug "$SkipLines lines skipped for $_.name length of file is $EndLine"
         
         StreamEdit $_.FullName $SkipLines $RemoveLines
-        Move-Item $_.FullName $TargetDir\Processed -Force
+        Move-Item $_.FullName $TargetDir\Processed
     }
+    $outs.Close()
 }
 
 function CountLines($InputFile){
@@ -137,7 +140,6 @@ function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
     Debug "The total is $TotalLines and the lines to process is $LinesToProcessCount for $InputFile"
     $Curcount = 0
     $ins = New-Object System.IO.StreamReader ($InputFile)
-    $outs = New-Object System.IO.StreamWriter -ArgumentList ([IO.File]::Open(($TargetDir + "\Output\consolidated.nessus"),"Append")) 
     try {
         # skip the first N lines
         for( $s = 1; $s -le $SkipLines; $s++ ) {
@@ -145,8 +147,8 @@ function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
             
         }
         $Curcount = $Curcount + $SkipLines
-        while( $Curcount -ne $LinesToProcessCount -and $Curcount -lt $TotalLines) {
-            #Debug "current: $curcount, to process: $LinesToProcessCount"
+        while( $Curcount -ne $LinesToProcessCount -and $Curcount -lt $TotalLines -1) {
+            Debug "current: $curcount, to process: $LinesToProcessCount"
             $outs.WriteLine( $ins.ReadLine() )
             $Curcount++
         }
@@ -155,9 +157,15 @@ function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
     
     finally {
         Debug "Finished with $InputFile"
-        $outs.Close()
         $ins.Close()
     }
+}
+
+function Debug($DebugMessage){
+    if ($debug -eq 1) {
+        write-host $DebugMessage
+    }
+        
 }
 
 function Rename-Report($ReportName) {
@@ -203,7 +211,7 @@ Function Import-Report {
     Import-Module -Name Posh-Nessus
     Write-host($(Get-Date -Format HH:mm) + " - Starting import.")
     $session = New-NessusSession -ComputerName $Server -Credentials $Cred
-    Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\Output\consolidated.nessus" #> $null
+    Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\Output\consolidated.nessus" > $null
     Write-host($(Get-Date -Format HH:mm) + " - Import finished.") -ForegroundColor Green
 }
 
@@ -216,8 +224,10 @@ Function Main() {
         Write-host($(Get-Date -Format HH:mm) + " - Posh-Nessus module does not exist, installing...") -ForegroundColor Yellow
         Install-NessusPOSH
     }
+    $scriptDir = Resolve-Path Merge-Nessusreport.ps1
+    write-host $scriptDir
 
-    $Path = [Environment]::GetFolderPath("MyDocuments")
+    $path = $PSScriptRoot
     $TargetDir = "$Path\Nessus"
     if(!(Test-Path -Path $TargetDir)) {
         Write-host($(Get-Date -Format HH:mm) + " - Creating $TargetDir") -ForegroundColor Yellow
