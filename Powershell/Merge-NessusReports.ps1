@@ -73,8 +73,8 @@ Function Export-Reports() {
     Write-host($(Get-Date -Format HH:mm) + " - Exports finished.") -ForegroundColor Green
 }
 
-Function Merge-Reports() {
-    Write-host($(Get-Date -Format HH:mm) + " - Starting merge, please be patient it takes a while...")
+Function Initialize() {
+    Write-host($(Get-Date -Format HH:mm) + " - Initialising...")
     if((Test-Path -Path "$TargetDir\output\") -eq $True) {
         Debug "Output folder allready exists"
     }
@@ -86,32 +86,33 @@ Function Merge-Reports() {
     }
     else {
         New-Item -ItemType Directory -Force -Path $TargetDir\Processed\| out-null
+        Debug "Processed folder created"
     }
-    
-    
+        
     if((Test-Path -Path "$TargetDir\Output\consolidated.nessus") -eq $True) {
         Write-host($(Get-Date -Format HH:mm) + " - Removing old merge file...") -ForegroundColor Yellow
         Remove-Item -Path "$TargetDir\Output\consolidated.nessus" -Force
+        Debug "Consolidated.nessus removed"
     }
+}
 
-    $outs = New-Object System.IO.StreamWriter -ArgumentList ([IO.File]::Open(($TargetDir + "\Output\consolidated.nessus"),"Append")) 
-
+Function Merge-Reports() {
+    Write-host($(Get-Date -Format HH:mm) + " - Starting merge, please be patient it takes a while...")
     $First = Get-ChildItem $TargetDir -Filter *.nessus | Select -First 1
     $Last = Get-ChildItem $TargetDir -Filter *.nessus | Select -Last 1
     Debug "Firstfile is $First and the last file is $last"
-    
-    
+       
     Get-ChildItem $TargetDir -Filter *.nessus | %{
 
         If($_.Name -ne $First.Name){
-            $SkipLines = (Select-String -Path $_.FullName -SimpleMatch "<Report name=" | select -expand LineNumber) + 1
+            $SkipLines = (Select-String -Path $_.FullName -SimpleMatch "<Report name=" | select -expand LineNumber)
         }
         else {
             $SkipLines = 0
         }
         
         If($_.Name -ne $Last.Name){
-        $RemoveLines = 4
+        $RemoveLines = 2
         }
         else {
         $RemoveLines = 0
@@ -122,10 +123,9 @@ Function Merge-Reports() {
         StreamEdit $_.FullName $SkipLines $RemoveLines
         Move-Item $_.FullName $TargetDir\Processed
     }
-    $outs.Close()
 }
 
-function CountLines($InputFile){
+Function CountLines($InputFile){
     $count = 0
     $reader = New-Object System.IO.StreamReader ($InputFile)
     while ($reader.ReadLine() -ne $null){$count++}
@@ -133,7 +133,7 @@ function CountLines($InputFile){
     return [int]$count
 }
 
-function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
+Function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
     $TotalLines = CountLines($InputFile)
    
     $LinesToProcessCount = ($TotalLines - $RemoveLines)
@@ -147,7 +147,7 @@ function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
             
         }
         $Curcount = $Curcount + $SkipLines
-        while( $Curcount -ne $LinesToProcessCount -and $Curcount -lt $TotalLines -1) {
+        while( $Curcount -ne $LinesToProcessCount -and $Curcount -lt $TotalLines) {
             Debug "current: $curcount, to process: $LinesToProcessCount"
             $outs.WriteLine( $ins.ReadLine() )
             $Curcount++
@@ -161,14 +161,14 @@ function StreamEdit($InputFile,[int]$SkipLines,[int]$RemoveLines) {
     }
 }
 
-function Debug($DebugMessage){
+Function Debug($DebugMessage){
     if ($debug -eq 1) {
         write-host $DebugMessage
     }
         
 }
 
-function Rename-Report($ReportName) {
+Function Rename-Report($ReportName) {
     $InputFile = "$TargetDir\Output\consolidated.nessus"
     $stringToReplace = '\<Report name=\".*\"\sxmlns\:cm=\"http\:\/\/www\.nessus\.org\/cm\">'
     $replaceWith = '<Report name="' + $ReportName + ' ' + (get-date -format dd/MM/yyyy) +'" xmlns:cm="http://www.nessus.org/cm">'
@@ -200,19 +200,30 @@ function Rename-Report($ReportName) {
     }
 }
 
-function Debug($DebugMessage){
+Function Debug($DebugMessage){
     if ($debug -eq 1) {
         write-host $DebugMessage
     }
         
 }
 
-Function Import-Report {
+Function Import-Report() {
     Import-Module -Name Posh-Nessus
     Write-host($(Get-Date -Format HH:mm) + " - Starting import.")
     $session = New-NessusSession -ComputerName $Server -Credentials $Cred
     Import-NessusScan -SessionId $session.SessionId -File "$TargetDir\Output\consolidated.nessus" > $null
     Write-host($(Get-Date -Format HH:mm) + " - Import finished.") -ForegroundColor Green
+}
+
+Function Wait-FileRead($file) {
+    While ($True) {
+        Try { 
+            [IO.File]::OpenWrite($file).Close() 
+            Break
+        }
+        Catch { 
+            Start-Sleep -Seconds 1 }
+        }
 }
 
 Function Main() {
@@ -224,8 +235,6 @@ Function Main() {
         Write-host($(Get-Date -Format HH:mm) + " - Posh-Nessus module does not exist, installing...") -ForegroundColor Yellow
         Install-NessusPOSH
     }
-    $scriptDir = Resolve-Path Merge-Nessusreport.ps1
-    write-host $scriptDir
 
     $path = $PSScriptRoot
     $TargetDir = "$Path\Nessus"
@@ -236,9 +245,15 @@ Function Main() {
 
     $Cred = Get-Credential
     $ReportName = "Consolidated $Folder"
+    
+    Initialize
     Export-Reports
+    $outs = New-Object System.IO.StreamWriter -ArgumentList ([IO.File]::Open(($TargetDir + "\Output\consolidated.nessus"),"Append"))
     Merge-Reports
+    $outs.Close()
+    Wait-FileRead($outs)
     Rename-Report $ReportName
+    Wait-FileRead($outs)
     Import-Report
     Write-host($(Get-Date -Format HH:mm) + " - Main finished") -ForegroundColor Green
 }
