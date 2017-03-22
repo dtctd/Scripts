@@ -66,9 +66,14 @@ Function Export-Reports() {
         Write-host($(Get-Date -Format HH:mm) + " - Exporting $name")
         $histories = Show-NessusScanHistory -SessionId $session.SessionId -ScanId $scan.ScanId | Where-Object {$_.Status -eq "completed"} 
         if ($histories) {
-            $hist = $histories[0] 
+            if ($histories -eq 1 ) {
+                $hist = $histories[0] 
+                Export-NessusScan -SessionId $session.SessionId -ScanId $scan.ScanId  -Format "nessus" -OutFile "$TargetDir\$name.nessus" -HistoryID $hist.HistoryId
+            } else {
+            $hist = $histories[$($histories.Count-1)] 
             Export-NessusScan -SessionId $session.SessionId -ScanId $scan.ScanId  -Format "nessus" -OutFile "$TargetDir\$name.nessus" -HistoryID $hist.HistoryId
-        }            
+            }
+        }
     }
     Write-host($(Get-Date -Format HH:mm) + " - Exports finished.") -ForegroundColor Green
 }
