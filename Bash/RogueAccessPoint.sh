@@ -8,6 +8,23 @@ if [[ $# -ne 2 ]]; then
 	exit 1
 fi
 
+# trap ctrl-c and call ctrl_c()
+trap ctrl_c INT
+
+function ctrl_c() {
+        # Stop and cleanup
+	echo "[-] Removing iptables entries..."
+	iptables --table nat --flush
+	iptables --flush
+	## Disable routing
+	sysctl net.ipv4.ip_forward=0 > /dev/null
+	# Disable DHCP/DNS server
+	kill $(cat /var/run/dnsmasq.pid)
+	service hostapd stop
+	service network-manager start
+	echo "[-] Rogue AP has been shutdown"
+}
+
 # Check prereqs
 prereqs="dnsmasq hostapd"
 for pkg in $prereqs ; do
@@ -59,10 +76,9 @@ iptables --append FORWARD --in-interface $wlan -j ACCEPT
 iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 80 -j REDIRECT --to 8081
 iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 8080  -j REDIRECT --to-port 8081
 iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 443 -j REDIRECT --to 8081
-iptables -t nat -D PREROUTING -i $wlan -p tcp --dport 8443 -j REDIRECT --to-port 8081
+iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 8443 -j REDIRECT --to-port 8081
 # Setup DNS
 iptables -t nat -A PREROUTING -i $wlan -p tcp --sport 53 -j DNAT --to-destination 8.8.8.8:53
-iptables -t nat -A POSTROUTING -j MASQUERADE
 # Run access point daemon
 echo "[-] Configure Burp proxy:"
 echo "[-] 1. Listen on all interfaces"
