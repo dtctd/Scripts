@@ -1,15 +1,15 @@
 #!/bin/bash
 # Variables
-#########################
-# The defaults          #
-#########################
+#-Defaults-------------------------------------------------------------#
+eth="eth0"         		#[ --wired ]
+wlan="wlan0"       		#[ --wireless]
+SSID="Evil"			#[ --ssid]
+PASSWORD="Welkom01"		#[ --password]
+CHANNEL="6"			#[ --channel]
+DNS="8.8.8.8"			#[ --dns]
+PORTS="80,443,8080,8443"	#[ --ports]
 
-eth="eth0"         	#[ --wired ]
-wlan="wlan0"       	#[ --wireless]
-SSID="Evil"		#[ --ssid]
-PASSWORD="Welkom01"	#[ --password]
-CHANNEL="6"		#[ --channel]
-
+##### (Cosmetic) Colour output
 RED="\033[01;31m"      # Issues/Errors
 GREEN="\033[01;32m"    # Success
 YELLOW="\033[01;33m"   # Warnings/Information
@@ -17,21 +17,26 @@ BLUE="\033[01;34m"     # Heading
 BOLD="\033[01;01m"     # Highlight
 RESET="\033[00m"       # Normal
 
+#-Arguments------------------------------------------------------------#
+
 #########################
 # The command line help #
 #########################
 display_help() {
     echo "Usage: $0 [option...]" >&2
     echo
-    echo "   -wired,		Set the wired interface 	default = eth0"
-    echo "   -wlan,		Set the wireless interface	default = wlan0"
-    echo "   -ssid,		Set the SSID of the AP		default = Evil"
-    echo "   -password,		Set the AP password		default = Welkom01"
-    echo "   -channel,		Set the channel of the AP	default = 6"
+    echo "   -wired,		Set the wired interface 		default = eth0"
+    echo "   -wlan,		Set the wireless interface		default = wlan0"
+    echo "   -ssid,		Set the SSID of the AP			default = Evil"
+    echo "   -password,		Set the AP password			default = Welkom01"
+    echo "   -channel,		Set the channel of the AP		default = 6"
+    echo "   -dns,		Set the DNS server for wlan		default = 8.8.8.8"
+    echo "   -ports,		Set the ports to forward to Burp	default = 80,443,8080,8443"
     echo
     exit 1
 }
 
+##### Read command line arguments
 while [[ "${#}" -gt 0 && ."${1}" == .-* ]]; do
   opt="${1}";
   shift;
@@ -48,6 +53,10 @@ while [[ "${#}" -gt 0 && ."${1}" == .-* ]]; do
       PASSWORD="${1}";;
     -channel|--channel )
       CHANNEL="${1}";;
+    -dns|--dns )
+      DNS="${1}";;
+    -ports|--ports )
+      PORTS="${1}";;
     -help|--help )
       display_help;;
     *) echo -e ' '${RED}'[!]'${RESET}" Unknown option: ${RED}${x}${RESET}" 1>&2 \
@@ -56,6 +65,7 @@ while [[ "${#}" -gt 0 && ."${1}" == .-* ]]; do
 done
 clear
 echo -e ' '${YELLOW}'[-]'${RESET}' Wired is set to: '${RED}$eth${RESET}' and wireless to: '${RED}$wlan${RESET} 1>&2
+
 
 # trap ctrl-c and call ctrl_c()
 trap ctrl_c INT
@@ -72,6 +82,7 @@ function ctrl_c() {
 	service hostapd stop
 	service network-manager start
 	echo -e ' '${YELLOW}'[-]'${RESET}' Rogue AP has shutdown'${RESET} 1>&2
+	exit
 }
 # Check prereqs
 prereqs="dnsmasq hostapd"
@@ -121,12 +132,10 @@ iptables --table nat --append POSTROUTING --out-interface $eth -j MASQUERADE -s 
 # Forward the traffic from wlan0 interface
 iptables --append FORWARD --in-interface $wlan -j ACCEPT
 # Redirect HTTP traffic to burpsuite port 8080 and TRANSPARANT mode
-iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 80 -j REDIRECT --to 8080
-iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 8080  -j REDIRECT --to-port 8080
-iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 443 -j REDIRECT --to 8080
-iptables -t nat -A PREROUTING -i $wlan -p tcp --dport 8443 -j REDIRECT --to-port 8080
-# Setup DNS
-iptables -t nat -A PREROUTING -i $wlan -p tcp --sport 53 -j DNAT --to-destination 8.8.8.8:53
+iptables -t nat -A PREROUTING -i $wlan -p tcp --match multiport --dports $PORTS -j REDIRECT --to 8080
+# Forward DNS requests
+iptables -t nat -A PREROUTING -i $wlan -p tcp --sport 53 -j DNAT --to-destination $DNS:53
+
 # Run access point daemon
 echo -e ' '${BOLD}'[-] Configure Burpsuite :'${RESET} 1>&2
 echo -e ' '${BOLD}'[-] 1. Listen on all interfaces'${RESET} 1>&2
@@ -134,7 +143,7 @@ echo -e ' '${BOLD}'[-] 2. Enable invisible proxying'${RESET} 1>&2
 echo -e ' '${BOLD}'[-] 3. Disable the webinterface'${RESET} 1>&2
 echo -e ' '${GREEN}'[-] Starting Rogue AP with SSID: '${RED}$SSID${GREEN}' and Password '${RED}$PASSWORD${RESET} 1>&2
 hostapd /etc/rap-hostapd.conf
-# Stop and cleanup
+# Stop and cleanup if something goes wrong
 echo -e ' '${YELLOW}'[-]'${RESET}' Removing iptables entries'${RESET} 1>&2
 iptables --table nat --flush
 iptables --flush
@@ -145,3 +154,4 @@ kill $(cat /var/run/dnsmasq.pid)
 service hostapd stop
 service network-manager start
 echo -e ' '${YELLOW}'[-]'${RESET}' Rogue AP has been shutdown'${RESET} 1>&2
+
