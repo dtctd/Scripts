@@ -23,15 +23,15 @@ RESET="\033[00m"       # Normal
 # The command line help #
 #########################
 display_help() {
-    echo "Usage: $0 [option...]" >&2
+    echo "Usage: $0 [options...]" >&2
     echo
-    echo "   -wired,		Set the wired interface 		default = eth0"
-    echo "   -wlan,		Set the wireless interface		default = wlan0"
-    echo "   -ssid,		Set the SSID of the AP			default = Evil"
-    echo "   -password,		Set the AP password			default = Welkom01"
-    echo "   -channel,		Set the channel of the AP		default = 6"
-    echo "   -dns,		Set the DNS server for wlan		default = 8.8.8.8"
-    echo "   -ports,		Set the ports to forward to Burp	default = 80,443,8080,8443"
+    echo "   -wired,		Set the wired interface 		default=\"eth0\""
+    echo "   -wlan,		Set the wireless interface		default=\"wlan0\""
+    echo "   -ssid,		Set the SSID of the AP			default=\"Evil\""
+    echo "   -password,		Set the AP password			default=\"Welkom01\""
+    echo "   -channel,		Set the channel of the AP		default=\"6\""
+    echo "   -dns,		Set the DNS server for wlan		default=\"8.8.8.8\""
+    echo "   -ports,		Set the ports to forward to Burp	default=\"80,443,8080,8443\""
     echo
     exit 1
 }
@@ -64,8 +64,6 @@ while [[ "${#}" -gt 0 && ."${1}" == .-* ]]; do
    esac
 done
 clear
-echo -e ' '${YELLOW}'[-]'${RESET}' Wired is set to: '${RED}$eth${RESET}' and wireless to: '${RED}$wlan${RESET} 1>&2
-
 
 # trap ctrl-c and call ctrl_c()
 trap ctrl_c INT
@@ -97,6 +95,23 @@ for pkg in $prereqs ; do
 		fi
 	fi
 done
+# check for devices
+FINDETH=`grep "eth0" /proc/net/dev`
+FINDWLAN=`grep "wlan0" /proc/net/dev`
+if  [ -n "$FINDETH" ] ; then
+	echo -e ' '${YELLOW}'[-]'${RESET}' Wired is set to: '${RED}$eth${RESET} 1>&2
+else
+	echo -e ' '${RED}'[!]'${RESET}' Interface not found! check if '${RED}$eth${RESET}' and '${RED}$wlan${RESET}' are available' 1>&2
+	exit
+fi
+if  [ -n "$FINDWLAN" ] ; then
+	echo -e ' '${YELLOW}'[-]'${RESET}' Wireless is set to: '${RED}$wlan${RESET}
+else
+	echo -e ' '${RED}'[!]'${RESET}' Interface not found! check if '${RED}$wlan${RESET}' is available' 1>&2
+	exit
+fi
+
+
 echo -e ' '${GREEN}'[-]'${RESET}' All prerequisites are installed'${RESET} 1>&2
 
 # /etc/rap-hostapd.conf
@@ -143,6 +158,8 @@ echo -e ' '${BOLD}'[-] 2. Enable invisible proxying'${RESET} 1>&2
 echo -e ' '${BOLD}'[-] 3. Disable the webinterface'${RESET} 1>&2
 echo -e ' '${GREEN}'[-] Starting Rogue AP with SSID: '${RED}$SSID${GREEN}' and Password '${RED}$PASSWORD${RESET} 1>&2
 hostapd /etc/rap-hostapd.conf
+
+
 # Stop and cleanup if something goes wrong
 echo -e ' '${YELLOW}'[-]'${RESET}' Removing iptables entries'${RESET} 1>&2
 iptables --table nat --flush
@@ -154,4 +171,3 @@ kill $(cat /var/run/dnsmasq.pid)
 service hostapd stop
 service network-manager start
 echo -e ' '${YELLOW}'[-]'${RESET}' Rogue AP has been shutdown'${RESET} 1>&2
-
