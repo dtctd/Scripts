@@ -89,30 +89,32 @@ for pkg in $prereqs ; do
 		echo "$pkg is installed" > /dev/null
 	else
 		if apt-get -qq install $pkg; then
-			echo "Succesfully installed $pkg"
+			echo -e ' '${GREEN}'[-]'${RESET}' Succesfully installed '${RED}$pkg${RESET} 1>&2
 		else
-			echo "Error installing $pkg"
+			echo -e ' '${RED}'[!]'${RESET}' Error installing '${RED}$pkg${RESET} 1>&2
 		fi
 	fi
 done
+
 # check for devices
+echo -e ' '${GREEN}'[-]'${RESET}' Checking devices...'${RESET} 1>&2
 FINDETH=`grep "eth0" /proc/net/dev`
 FINDWLAN=`grep "wlan0" /proc/net/dev`
 if  [ -n "$FINDETH" ] ; then
-	echo -e ' '${YELLOW}'[-]'${RESET}' Wired is set to: '${RED}$eth${RESET} 1>&2
+	echo -e ' '${GREEN}'[-]'${RESET}' Wired is set to: '${RED}$eth${RESET} 1>&2
 else
 	echo -e ' '${RED}'[!]'${RESET}' Interface not found! check if '${RED}$eth${RESET}' and '${RED}$wlan${RESET}' are available' 1>&2
 	exit
 fi
 if  [ -n "$FINDWLAN" ] ; then
-	echo -e ' '${YELLOW}'[-]'${RESET}' Wireless is set to: '${RED}$wlan${RESET}
+	echo -e ' '${GREEN}'[-]'${RESET}' Wireless is set to: '${RED}$wlan${RESET}
 else
 	echo -e ' '${RED}'[!]'${RESET}' Interface not found! check if '${RED}$wlan${RESET}' is available' 1>&2
 	exit
 fi
 
 
-echo -e ' '${GREEN}'[-]'${RESET}' All prerequisites are installed'${RESET} 1>&2
+echo -e ' '${GREEN}'[-]'${RESET}' All prerequisites are met!'${RESET} 1>&2
 
 # /etc/rap-hostapd.conf
 cat >/etc/rap-hostapd.conf <<EOF
@@ -159,15 +161,5 @@ echo -e ' '${BOLD}'[-] 3. Disable the webinterface'${RESET} 1>&2
 echo -e ' '${GREEN}'[-] Starting Rogue AP with SSID: '${RED}$SSID${GREEN}' and Password '${RED}$PASSWORD${RESET} 1>&2
 hostapd /etc/rap-hostapd.conf
 
-
-# Stop and cleanup if something goes wrong
-echo -e ' '${YELLOW}'[-]'${RESET}' Removing iptables entries'${RESET} 1>&2
-iptables --table nat --flush
-iptables --flush
-## Disable routing
-sysctl net.ipv4.ip_forward=0 > /dev/null
-# Disable DHCP/DNS server
-kill $(cat /var/run/dnsmasq.pid)
-service hostapd stop
-service network-manager start
-echo -e ' '${YELLOW}'[-]'${RESET}' Rogue AP has been shutdown'${RESET} 1>&2
+# Cleanup if something goes wrong
+ctrl_c
