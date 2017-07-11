@@ -7,6 +7,7 @@ PASSWORD="Welkom01"		#[ --password]
 CHANNEL="6"			#[ --channel]
 DNS="8.8.8.8"			#[ --dns]
 PORTS="80,443,8080,8443"	#[ --ports]
+NOPROXY=""			#[ --noproxy]
 
 ##### (Cosmetic) Colour output
 RED="\033[01;31m"      # Issues/Errors
@@ -27,6 +28,7 @@ display_help() {
     echo "   -channel,		Set the channel of the AP		default=\"6\""
     echo "   -dns,		Set the DNS server for wlan		default=\"8.8.8.8\""
     echo "   -ports,		Set the ports to forward to Burp	default=\"80,443,8080,8443\""
+    echo "   -noproxy		Disable port forwarding to Burp		default=\"False\""
     echo
     exit 1
 }
@@ -34,24 +36,33 @@ display_help() {
 ##### Read command line arguments
 while [[ "${#}" -gt 0 && ."${1}" == .-* ]]; do
   opt="${1}";
-  shift;
   case "$(echo ${opt} | tr '[:upper:]' '[:lower:]')" in
     -|-- ) break 2;;
 
     -wired|--wired )
-      eth="${1}";;
+      eth="${2}"
+      shift 2;;
     -wireless|--wireless )
-      wlan="${1}";;
+      wlan="${2}"
+      shift 2;;
     -ssid|--ssid )
-      SSID="${1}";;
+      SSID="${2}"
+      shift 2;;
     -password|--password )
-      PASSWORD="${1}";;
+      PASSWORD="${2}"
+      shift 2;;
     -channel|--channel )
-      CHANNEL="${1}";;
+      CHANNEL="${2}"
+      shift 2;;
     -dns|--dns )
-      DNS="${1}";;
+      DNS="${2}"
+      shift 2;;
     -ports|--ports )
-      PORTS="${1}";;
+      PORTS="${2}"
+      shift 2;;
+    -norpoxy|--noproxy )
+      NOPROXY="noproxy"
+      shift 1;;
     -help|--help )
       display_help;;
     *) echo -e ' '${RED}'[!]'${RESET}" Unknown option: ${RED}${x}${RESET}" 1>&2 \
@@ -132,13 +143,15 @@ iptables --table nat --flush > /dev/null										# Enable NAT
 iptables --flush > /dev/null
 iptables --table nat --append POSTROUTING --out-interface $eth -j MASQUERADE -s 192.168.101.0/24			# Allow natting the traffic comes on wlan with source in IP 192.168.101.0/24 range
 iptables --append FORWARD --in-interface $wlan -j ACCEPT								# Forward the traffic from wlan0 interface
-iptables -t nat -A PREROUTING -i $wlan -p tcp --match multiport --dports $PORTS -j REDIRECT --to 8080			# Redirect HTTP traffic to burpsuite port 8080 and TRANSPARANT mode
 iptables -t nat -A PREROUTING -i $wlan -p tcp --sport 53 -j DNAT --to-destination $DNS:53				# Forward DNS requests
 
-echo -e ' '${BOLD}'[-] Configure Burpsuite :'${RESET} 1>&2
-echo -e ' '${BOLD}'[-] 1. Listen on all interfaces'${RESET} 1>&2
-echo -e ' '${BOLD}'[-] 2. Enable invisible proxying'${RESET} 1>&2
-echo -e ' '${BOLD}'[-] 3. Disable the webinterface'${RESET} 1>&2
+if [ "${NOPROXY}" != "noproxy" ]; then
+	iptables -t nat -A PREROUTING -i $wlan -p tcp --match multiport --dports $PORTS -j REDIRECT --to 8080		# Redirect HTTP traffic to burpsuite port 8080 and TRANSPARANT mode
+	echo -e ' '${BOLD}'[-] Configure Burpsuite :'${RESET} 1>&2
+	echo -e ' '${BOLD}'[-] 1. Listen on all interfaces'${RESET} 1>&2
+	echo -e ' '${BOLD}'[-] 2. Enable invisible proxying'${RESET} 1>&2
+	echo -e ' '${BOLD}'[-] 3. Disable the webinterface'${RESET} 1>&2
+fi
 echo -e ' '${GREEN}'[-] Starting Rogue AP with SSID: '${RED}$SSID${GREEN}' and Password '${RED}$PASSWORD${RESET} 1>&2
 hostapd /etc/rap-hostapd.conf
 
