@@ -23,6 +23,8 @@ param (
     [Parameter(Mandatory=$true)][string]$Folder
  )
 
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
 Function Install-NessusPOSH() {
     # Make sure the module is not loaded
     Remove-Module Posh-Nessus -ErrorAction SilentlyContinue
