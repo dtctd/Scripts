@@ -1,3 +1,2 @@
-body {
-    color: expression(alert('XSS'));
-}
+body {color: expression(alert('XSS'));}
+p    {color: red;}
