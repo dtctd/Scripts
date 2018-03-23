@@ -1,3 +1,1 @@
-#Xsstc {
-background-image: url('about:blank#Hello%20World");
-}
+i{background: url('<img src=x onerror=alert("XSS")>')}
