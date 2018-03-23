@@ -1,1 +1,3 @@
-i{background: url('<img src=x onerror=alert("XSS")>')}
+body {
+    color: expression(alert('XSS'));
+}
